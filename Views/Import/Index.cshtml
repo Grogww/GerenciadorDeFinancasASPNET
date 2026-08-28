@@ -1,0 +1,71 @@
+@{
+    ViewData["Title"] = "Importar extrato";
+}
+
+<div class="page-header">
+    <div>
+        <h1>Importar extrato</h1>
+        <p class="page-subtitle">Envie o CSV do extrato do banco. Você revisa as categorias antes de gravar.</p>
+    </div>
+</div>
+
+<div class="card app-card upload-card">
+    <form asp-controller="Import" asp-action="Upload" method="post" enctype="multipart/form-data" id="upload-form">
+        @Html.AntiForgeryToken()
+        <label class="dropzone" id="dropzone" for="arquivo">
+            <span class="dropzone-icon">⤒</span>
+            <span class="dropzone-title">Arraste o arquivo CSV aqui</span>
+            <span class="dropzone-hint">ou clique para escolher no computador</span>
+            <span class="dropzone-file" id="dropzone-file"></span>
+            <input type="file" id="arquivo" name="arquivo" accept=".csv,text/csv" hidden />
+        </label>
+        <div class="upload-actions">
+            <button type="submit" class="btn btn-primary btn-lg" id="btn-enviar" disabled>Ler extrato</button>
+        </div>
+    </form>
+</div>
+
+<div class="card app-card mt-4">
+    <h2 class="card-section-title">Como funciona</h2>
+    <ol class="how-it-works">
+        <li><strong>Envie o extrato</strong> — o arquivo CSV exportado no internet banking (linhas de saldo são ignoradas automaticamente).</li>
+        <li><strong>Revise as categorias</strong> — na primeira importação você diz a categoria de cada lançamento; o sistema memoriza cada escolha.</li>
+        <li><strong>Nas próximas, é automático</strong> — lançamentos com a mesma descrição já chegam categorizados; você só ajusta as novidades.</li>
+        <li><strong>Sem duplicatas</strong> — se o mesmo extrato (ou período sobreposto) for enviado de novo, as transações repetidas são ignoradas.</li>
+    </ol>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const dropzone = document.getElementById('dropzone');
+            const input = document.getElementById('arquivo');
+            const fileLabel = document.getElementById('dropzone-file');
+            const btn = document.getElementById('btn-enviar');
+
+            function refresh() {
+                const file = input.files[0];
+                fileLabel.textContent = file ? file.name : '';
+                dropzone.classList.toggle('has-file', !!file);
+                btn.disabled = !file;
+            }
+
+            input.addEventListener('change', refresh);
+
+            ['dragover', 'dragenter'].forEach(ev => dropzone.addEventListener(ev, e => {
+                e.preventDefault();
+                dropzone.classList.add('dragging');
+            }));
+            ['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, e => {
+                e.preventDefault();
+                dropzone.classList.remove('dragging');
+            }));
+            dropzone.addEventListener('drop', e => {
+                if (e.dataTransfer.files.length > 0) {
+                    input.files = e.dataTransfer.files;
+                    refresh();
+                }
+            });
+        })();
+    </script>
+}

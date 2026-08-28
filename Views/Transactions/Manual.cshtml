@@ -1,0 +1,92 @@
+@model ManualTransactionViewModel
+@{
+    var editando = Model.Id.HasValue;
+    ViewData["Title"] = editando ? "Editar transação manual" : "Nova transação manual";
+}
+
+<div class="page-header">
+    <div>
+        <h1>@ViewData["Title"]</h1>
+        <p class="page-subtitle">
+            Registre movimentos que não passam pelo extrato — dinheiro físico, acertos entre amigos, ajustes de saldo.
+        </p>
+    </div>
+    <a class="btn btn-outline-secondary" asp-action="Index">← Voltar</a>
+</div>
+
+@if (ViewData["ErroForm"] is string erroForm) {
+    <div class="alert alert-danger app-alert" role="alert">@erroForm</div>
+}
+
+<div class="card app-card manual-form-card">
+    <form asp-action="@(editando ? "Edit" : "Create")" method="post" class="manual-form">
+        @Html.AntiForgeryToken()
+        @if (editando) {
+            <input type="hidden" name="Id" value="@Model.Id" />
+        }
+
+        <div class="filter-field">
+            <label>Tipo</label>
+            <div class="tipo-toggle" role="radiogroup" aria-label="Tipo do lançamento">
+                <input type="radio" class="btn-check" name="Tipo" id="tipo-saida" value="Saída"
+                       checked="@(Model.Tipo != "Entrada")" />
+                <label class="btn tipo-btn tipo-btn-saida" for="tipo-saida">− Saída</label>
+
+                <input type="radio" class="btn-check" name="Tipo" id="tipo-entrada" value="Entrada"
+                       checked="@(Model.Tipo == "Entrada")" />
+                <label class="btn tipo-btn tipo-btn-entrada" for="tipo-entrada">+ Entrada</label>
+            </div>
+        </div>
+
+        <div class="manual-form-row">
+            <div class="filter-field">
+                <label for="m-data">Data</label>
+                <input type="date" class="form-control" id="m-data" name="Data"
+                       value="@Model.Data.ToString("yyyy-MM-dd")" required />
+            </div>
+            <div class="filter-field">
+                <label for="m-valor">Valor (R$)</label>
+                <input type="text" class="form-control" id="m-valor" name="ValorTexto"
+                       value="@Model.ValorTexto" inputmode="decimal" placeholder="0,00" required
+                       pattern="[0-9]{1,3}(\.?[0-9]{3})*(,[0-9]{1,2})?|[0-9]+([.,][0-9]{1,2})?"
+                       title="Use vírgula para os centavos, ex.: 25,90" />
+            </div>
+        </div>
+
+        <div class="filter-field">
+            <label for="m-lancamento">Descrição</label>
+            <input type="text" class="form-control" id="m-lancamento" name="Lancamento" maxlength="120" required
+                   value="@Model.Lancamento" placeholder="Ex.: Feira, Padaria, Corte de cabelo…" />
+        </div>
+
+        <div class="filter-field">
+            <label for="m-detalhes">Detalhes <span class="label-opt">(opcional)</span></label>
+            <input type="text" class="form-control" id="m-detalhes" name="Detalhes" maxlength="200"
+                   value="@Model.Detalhes" placeholder="Ex.: pago em dinheiro no mercado da esquina" />
+        </div>
+
+        <div class="filter-field">
+            <label for="m-categoria">Categoria <span class="label-opt">(opcional — também ensina o sistema)</span></label>
+            <select class="form-select" id="m-categoria" name="CategoryId">
+                <option value="">— sem categoria —</option>
+                @foreach (var cat in Model.Categories) {
+                    if (Model.CategoryId == cat.Id) {
+                        <option value="@cat.Id" selected>@cat.Nome</option>
+                    } else {
+                        <option value="@cat.Id">@cat.Nome</option>
+                    }
+                }
+            </select>
+        </div>
+
+        <div class="manual-form-actions">
+            <a class="btn btn-outline-secondary" asp-action="Index">Cancelar</a>
+            <button type="submit" class="btn btn-primary">@(editando ? "Salvar alterações" : "Registrar transação")</button>
+        </div>
+    </form>
+</div>
+
+<p class="manual-hint">
+    ⓘ Transações manuais ganham a marca <span class="badge-manual">manual</span> na listagem e podem ser
+    editadas ou excluídas depois. As importadas do extrato não — elas são o espelho fiel do banco.
+</p>

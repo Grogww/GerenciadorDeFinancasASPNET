@@ -1,0 +1,347 @@
+@model DashboardViewModel
+@{
+    ViewData["Title"] = "Dashboard";
+
+    // Gráfico de categorias: no máximo 8 fatias com cor própria; o resto vira "Outras".
+    // (Mais que isso as cores deixam de ser distinguíveis — a tabela abaixo tem tudo.)
+    var categoriasGrafico = Model.Categorias.Take(8).ToList();
+    var restoCategorias = Model.Categorias.Skip(8).Sum(c => c.Total);
+    if (restoCategorias > 0) {
+        categoriasGrafico.Add(new DashboardViewModel.GastoCategoria {
+            Nome = "Outras",
+            Cor = "#cbd5e1",
+            Total = restoCategorias,
+            Percentual = Model.TotalSaidas > 0 ? Math.Round(restoCategorias / Model.TotalSaidas * 100, 1) : 0,
+        });
+    }
+
+    var chartJson = System.Text.Json.JsonSerializer.Serialize(new {
+        meses = Model.Meses.Select(m => new { rotulo = m.Rotulo, entradas = m.Entradas, saidas = m.Saidas, saldo = m.SaldoAcumulado }),
+        categorias = categoriasGrafico.Select(c => new { nome = c.Nome, cor = c.Cor, total = c.Total }),
+        estabelecimentos = Model.Estabelecimentos.Select(e => new { nome = e.Nome, total = e.Total, quantidade = e.Quantidade }),
+        diasSemana = Model.DiasSemana.Select(d => new { rotulo = d.Rotulo, total = d.Total }),
+    });
+}
+
+<div class="page-header">
+    <div>
+        <h1>Dashboard</h1>
+        <p class="page-subtitle">@Model.TotalTransacoes lançamentos · @Model.PeriodoRotulo</p>
+    </div>
+</div>
+
+@* Filtro único no topo: todos os números e gráficos abaixo respondem à mesma fatia. *@
+<div class="periodo-tabs" role="navigation" aria-label="Período do dashboard">
+    <a class="periodo-tab @(Model.Periodo == "6m" ? "active" : "")" href="?periodo=6m">Últimos 6 meses</a>
+    <a class="periodo-tab @(Model.Periodo == "12m" ? "active" : "")" href="?periodo=12m">Últimos 12 meses</a>
+    <a class="periodo-tab @(Model.Periodo == "ano" ? "active" : "")" href="?periodo=ano">Ano atual</a>
+    <a class="periodo-tab @(Model.Periodo == "tudo" ? "active" : "")" href="?periodo=tudo">Tudo</a>
+</div>
+
+@if (Model.TotalTransacoes == 0) {
+    <div class="card app-card empty-state">
+        <span class="empty-icon">◔</span>
+        <p>Sem transações neste período. Importe um extrato ou registre uma transação manual para ver os gráficos.</p>
+        <div class="page-actions">
+            <a class="btn btn-primary" asp-controller="Import" asp-action="Index">Importar extrato</a>
+            <a class="btn btn-outline-secondary" asp-controller="Transactions" asp-action="Create">Nova transação</a>
+        </div>
+    </div>
+    return;
+}
+
+<div class="summary-grid">
+    <div class="card app-card summary-card">
+        <span class="summary-label">Entradas</span>
+        <span class="summary-value valor-pos">@Model.TotalEntradas.ToString("C2")</span>
+    </div>
+    <div class="card app-card summary-card">
+        <span class="summary-label">Saídas</span>
+        <span class="summary-value valor-neg">@((-Model.TotalSaidas).ToString("C2"))</span>
+    </div>
+    <div class="card app-card summary-card">
+        <span class="summary-label">Saldo do período</span>
+        <span class="summary-value @(Model.Saldo < 0 ? "valor-neg" : "valor-pos")">@Model.Saldo.ToString("C2")</span>
+    </div>
+    <div class="card app-card summary-card">
+        <span class="summary-label">Média de saídas / mês</span>
+        <span class="summary-value">@((-Model.MediaMensalSaidas).ToString("C2"))</span>
+    </div>
+</div>
+
+@if (Model.Insights.Count > 0) {
+    <div class="card app-card insights-card">
+        <h2 class="card-section-title">Insights do período</h2>
+        <ul class="insights-list">
+            @foreach (var insight in Model.Insights) {
+                <li>@insight</li>
+            }
+        </ul>
+    </div>
+}
+
+<div class="dash-grid">
+
+    <div class="card app-card chart-card chart-card-wide">
+        <h2 class="card-section-title">Entradas × saídas por mês</h2>
+        <div class="chart-box" style="height:280px"><canvas id="chart-meses"></canvas></div>
+        <details class="chart-table">
+            <summary>Ver como tabela</summary>
+            <table class="table app-table">
+                <thead><tr><th>Mês</th><th class="text-end">Entradas</th><th class="text-end">Saídas</th><th class="text-end">Saldo do mês</th></tr></thead>
+                <tbody>
+                    @foreach (var m in Model.Meses) {
+                        <tr>
+                            <td>@m.Rotulo</td>
+                            <td class="text-end valor-pos">@m.Entradas.ToString("C2")</td>
+                            <td class="text-end valor-neg">@((-m.Saidas).ToString("C2"))</td>
+                            <td class="text-end @(m.Entradas - m.Saidas < 0 ? "valor-neg" : "valor-pos")">@((m.Entradas - m.Saidas).ToString("C2"))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </details>
+    </div>
+
+    <div class="card app-card chart-card chart-card-wide">
+        <h2 class="card-section-title">Saldo acumulado no período</h2>
+        <div class="chart-box" style="height:240px"><canvas id="chart-saldo"></canvas></div>
+        <details class="chart-table">
+            <summary>Ver como tabela</summary>
+            <table class="table app-table">
+                <thead><tr><th>Mês</th><th class="text-end">Saldo acumulado</th></tr></thead>
+                <tbody>
+                    @foreach (var m in Model.Meses) {
+                        <tr>
+                            <td>@m.Rotulo</td>
+                            <td class="text-end @(m.SaldoAcumulado < 0 ? "valor-neg" : "valor-pos")">@m.SaldoAcumulado.ToString("C2")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </details>
+    </div>
+
+    <div class="card app-card chart-card">
+        <h2 class="card-section-title">Saídas por categoria</h2>
+        <div class="chart-box" style="height:@(Math.Max(3, categoriasGrafico.Count) * 36 + 40)px"><canvas id="chart-categorias"></canvas></div>
+        <details class="chart-table">
+            <summary>Ver como tabela</summary>
+            <table class="table app-table">
+                <thead><tr><th>Categoria</th><th class="text-end">Total</th><th class="text-end">% das saídas</th></tr></thead>
+                <tbody>
+                    @foreach (var c in Model.Categorias) {
+                        <tr>
+                            <td><span class="cat-dot" style="background:@c.Cor"></span> @c.Nome</td>
+                            <td class="text-end">@((-c.Total).ToString("C2"))</td>
+                            <td class="text-end">@c.Percentual.ToString("F1")%</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </details>
+    </div>
+
+    <div class="card app-card chart-card">
+        <h2 class="card-section-title">Top estabelecimentos (saídas)</h2>
+        <div class="chart-box" style="height:@(Math.Max(3, Model.Estabelecimentos.Count) * 36 + 40)px"><canvas id="chart-estabelecimentos"></canvas></div>
+        <details class="chart-table">
+            <summary>Ver como tabela</summary>
+            <table class="table app-table">
+                <thead><tr><th>Estabelecimento</th><th class="text-end">Total</th><th class="text-end">Lançamentos</th></tr></thead>
+                <tbody>
+                    @foreach (var e in Model.Estabelecimentos) {
+                        <tr>
+                            <td>@e.Nome</td>
+                            <td class="text-end">@((-e.Total).ToString("C2"))</td>
+                            <td class="text-end">@e.Quantidade</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </details>
+    </div>
+
+    <div class="card app-card chart-card">
+        <h2 class="card-section-title">Saídas por dia da semana</h2>
+        <div class="chart-box" style="height:220px"><canvas id="chart-dias"></canvas></div>
+        <details class="chart-table">
+            <summary>Ver como tabela</summary>
+            <table class="table app-table">
+                <thead><tr><th>Dia</th><th class="text-end">Total</th></tr></thead>
+                <tbody>
+                    @foreach (var d in Model.DiasSemana) {
+                        <tr>
+                            <td>@d.Rotulo</td>
+                            <td class="text-end">@((-d.Total).ToString("C2"))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </details>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="~/lib/chartjs/chart.umd.min.js"></script>
+    <script>
+        (function () {
+            const dados = @Html.Raw(chartJson);
+
+            // Espera a Inter carregar antes de desenhar: o Chart.js mede os rótulos na
+            // criação e, com a fonte fallback (mais estreita), o eixo Y sai cortado.
+            function aoCarregarFontes(fn) {
+                if (document.fonts && document.fonts.ready) {
+                    document.fonts.ready.then(fn);
+                } else {
+                    fn();
+                }
+            }
+            aoCarregarFontes(function iniciarGraficos() {
+
+            const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+            // Cores: paleta validada (CVD ΔE 21,2 no par verde-água/vermelho) + tokens do tema.
+            const COR_ENTRADA = '#1baf7a';
+            const COR_SAIDA = '#e34948';
+            const COR_SERIE = '#2a78d6';
+            const INK_MUTED = '#64748b';
+            const GRID = '#eef1f5';
+            const EIXO = '#e2e8f0';
+
+            Chart.defaults.font.family = '"Inter", "Segoe UI", system-ui, sans-serif';
+            Chart.defaults.font.size = 12;
+            Chart.defaults.color = INK_MUTED;
+
+            const eixoValor = {
+                grid: { color: GRID, drawTicks: false },
+                border: { color: EIXO },
+                ticks: { callback: v => brl.format(v), maxTicksLimit: 6 },
+            };
+            const eixoCategoria = {
+                grid: { display: false },
+                border: { color: EIXO },
+            };
+            const tooltipValor = {
+                callbacks: { label: ctx => ' ' + (ctx.dataset.label ? ctx.dataset.label + ': ' : '') + brl.format(ctx.parsed.y ?? ctx.parsed.x) },
+            };
+
+            // Barras finas com ponta arredondada e base reta (spec de marcas).
+            const barra = { maxBarThickness: 24, borderRadius: 4, borderSkipped: 'start' };
+
+            // ---- Entradas × saídas por mês (2 séries → legenda presente) ----
+            new Chart(document.getElementById('chart-meses'), {
+                type: 'bar',
+                data: {
+                    labels: dados.meses.map(m => m.rotulo),
+                    datasets: [
+                        { label: 'Entradas', data: dados.meses.map(m => m.entradas), backgroundColor: COR_ENTRADA, ...barra },
+                        { label: 'Saídas', data: dados.meses.map(m => m.saidas), backgroundColor: COR_SAIDA, ...barra },
+                    ],
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false }, // um tooltip, todas as séries
+                    plugins: {
+                        legend: { position: 'top', align: 'start', labels: { boxWidth: 12, boxHeight: 12, borderRadius: 3, useBorderRadius: true } },
+                        tooltip: tooltipValor,
+                    },
+                    scales: { x: eixoCategoria, y: eixoValor },
+                },
+            });
+
+            // ---- Saldo acumulado (1 série → sem legenda; o título nomeia) ----
+            new Chart(document.getElementById('chart-saldo'), {
+                type: 'line',
+                data: {
+                    labels: dados.meses.map(m => m.rotulo),
+                    datasets: [{
+                        label: 'Saldo acumulado',
+                        data: dados.meses.map(m => m.saldo),
+                        borderColor: COR_SERIE,
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointBackgroundColor: COR_SERIE,
+                        pointBorderColor: '#ffffff',  // anel de superfície do marcador
+                        pointBorderWidth: 2,
+                        pointHitRadius: 12,
+                        fill: true,
+                        backgroundColor: 'rgba(42, 120, 214, 0.10)', // lavagem ~10%
+                        tension: 0.25,
+                    }],
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { display: false }, tooltip: tooltipValor },
+                    scales: { x: eixoCategoria, y: eixoValor },
+                },
+            });
+
+            // ---- Saídas por categoria (cor segue a entidade: a mesma do restante do app) ----
+            new Chart(document.getElementById('chart-categorias'), {
+                type: 'bar',
+                data: {
+                    labels: dados.categorias.map(c => c.nome),
+                    datasets: [{
+                        data: dados.categorias.map(c => c.total),
+                        backgroundColor: dados.categorias.map(c => c.cor),
+                        ...barra,
+                    }],
+                },
+                options: {
+                    indexAxis: 'y',
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: tooltipValor },
+                    scales: { x: { ...eixoValor, ticks: { ...eixoValor.ticks, maxTicksLimit: 5 } }, y: eixoCategoria },
+                },
+            });
+
+            // ---- Top estabelecimentos (categorias nominais → um único matiz) ----
+            new Chart(document.getElementById('chart-estabelecimentos'), {
+                type: 'bar',
+                data: {
+                    labels: dados.estabelecimentos.map(e => e.nome),
+                    datasets: [{
+                        data: dados.estabelecimentos.map(e => e.total),
+                        backgroundColor: COR_SERIE,
+                        ...barra,
+                    }],
+                },
+                options: {
+                    indexAxis: 'y',
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ' ' + brl.format(ctx.parsed.x) +
+                                    ' em ' + dados.estabelecimentos[ctx.dataIndex].quantidade + ' lançamentos',
+                            },
+                        },
+                    },
+                    scales: {
+                        x: { ...eixoValor, ticks: { ...eixoValor.ticks, maxTicksLimit: 5 } },
+                        y: { ...eixoCategoria, ticks: { callback: function (v) { const l = this.getLabelForValue(v); return l.length > 18 ? l.slice(0, 17) + '…' : l; } } },
+                    },
+                },
+            });
+
+            // ---- Saídas por dia da semana ----
+            new Chart(document.getElementById('chart-dias'), {
+                type: 'bar',
+                data: {
+                    labels: dados.diasSemana.map(d => d.rotulo),
+                    datasets: [{ data: dados.diasSemana.map(d => d.total), backgroundColor: COR_SERIE, ...barra }],
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: tooltipValor },
+                    scales: { x: eixoCategoria, y: eixoValor },
+                },
+            });
+            });
+        })();
+    </script>
+}

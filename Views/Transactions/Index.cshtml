@@ -1,0 +1,232 @@
+@model TransactionsIndexViewModel
+@{
+    ViewData["Title"] = "Transações";
+}
+
+<div class="page-header">
+    <div>
+        <h1>Transações</h1>
+        <p class="page-subtitle">
+            @Model.Transactions.Count lançamentos
+            @if (Model.SemCategoria > 0) {
+                <span>· <span class="text-warn">@Model.SemCategoria sem categoria</span></span>
+            }
+        </p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-outline-secondary" asp-controller="Import" asp-action="Index">⤒ Importar extrato</a>
+        <a class="btn btn-primary" asp-action="Create">＋ Nova transação</a>
+    </div>
+</div>
+
+<div class="summary-grid">
+    <div class="card app-card summary-card">
+        <span class="summary-label">Entradas</span>
+        <span class="summary-value valor-pos">@Model.TotalEntradas.ToString("C2")</span>
+    </div>
+    <div class="card app-card summary-card">
+        <span class="summary-label">Saídas</span>
+        <span class="summary-value valor-neg">@Model.TotalSaidas.ToString("C2")</span>
+    </div>
+    <div class="card app-card summary-card">
+        <span class="summary-label">Saldo do período</span>
+        <span class="summary-value @(Model.Saldo < 0 ? "valor-neg" : "valor-pos")">@Model.Saldo.ToString("C2")</span>
+    </div>
+</div>
+
+<form method="get" class="card app-card filter-bar" id="filter-form">
+    <div class="filter-field">
+        <label for="f-periodo">Período</label>
+        <select class="form-select form-select-sm" id="f-periodo" name="periodo">
+            <option value="">Todos</option>
+            @foreach (var p in Model.PeriodosDisponiveis) {
+                var partes = p.Split('-');
+                var rotulo = new DateOnly(int.Parse(partes[0]), int.Parse(partes[1]), 1).ToString("MMMM 'de' yyyy");
+                if (p == Model.Periodo) {
+                    <option value="@p" selected>@rotulo</option>
+                } else {
+                    <option value="@p">@rotulo</option>
+                }
+            }
+        </select>
+    </div>
+    <div class="filter-field">
+        <label for="f-categoria">Categoria</label>
+        <select class="form-select form-select-sm" id="f-categoria" name="categoriaId">
+            <option value="">Todas</option>
+            @if (Model.CategoriaId == -1) {
+                <option value="-1" selected>Sem categoria</option>
+            } else {
+                <option value="-1">Sem categoria</option>
+            }
+            @foreach (var cat in Model.Categories) {
+                if (Model.CategoriaId == cat.Id) {
+                    <option value="@cat.Id" selected>@cat.Nome</option>
+                } else {
+                    <option value="@cat.Id">@cat.Nome</option>
+                }
+            }
+        </select>
+    </div>
+    <div class="filter-field">
+        <label for="f-tipo">Tipo</label>
+        <select class="form-select form-select-sm" id="f-tipo" name="tipo">
+            <option value="">Todos</option>
+            @if (Model.Tipo == "Entrada") {
+                <option value="Entrada" selected>Entrada</option>
+            } else {
+                <option value="Entrada">Entrada</option>
+            }
+            @if (Model.Tipo == "Saída") {
+                <option value="Saída" selected>Saída</option>
+            } else {
+                <option value="Saída">Saída</option>
+            }
+        </select>
+    </div>
+    <div class="filter-field filter-grow">
+        <label for="f-busca">Buscar</label>
+        <input type="search" class="form-control form-control-sm" id="f-busca" name="busca"
+               value="@Model.Busca" placeholder="Descrição, estabelecimento…" />
+    </div>
+    <div class="filter-actions">
+        <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+        <a class="btn btn-sm btn-outline-secondary" asp-action="Index">Limpar</a>
+    </div>
+</form>
+
+@if (Model.Transactions.Count == 0) {
+    <div class="card app-card empty-state">
+        <span class="empty-icon">⇄</span>
+        <p>Nenhuma transação encontrada.</p>
+        <a class="btn btn-primary" asp-controller="Import" asp-action="Index">Importar meu primeiro extrato</a>
+    </div>
+} else {
+    <div class="card app-card table-card">
+        <table class="table app-table align-middle">
+            <thead>
+                <tr>
+                    <th style="width:110px">Data</th>
+                    <th>Lançamento</th>
+                    <th class="text-end" style="width:140px">Valor</th>
+                    <th style="width:280px">Categoria</th>
+                    <th style="width:90px"><span class="visually-hidden">Ações</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in Model.Transactions) {
+                    <tr>
+                        <td class="text-nowrap">@t.Date.ToString("dd/MM/yyyy")</td>
+                        <td>
+                            <div class="tx-title">
+                                @t.Lancamento
+                                @if (t.IsManual) {
+                                    <span class="badge-manual" title="Registrada manualmente (não veio do extrato)">manual</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(t.Detalhes)) {
+                                <div class="tx-details">@t.Detalhes</div>
+                            }
+                        </td>
+                        <td class="text-end text-nowrap @(t.Valor < 0 ? "valor-neg" : "valor-pos")">
+                            @t.Valor.ToString("C2")
+                        </td>
+                        <td>
+                            <div class="cat-cell">
+                                <span class="cat-dot" data-dot-for="@t.Id"
+                                      style="background:@(t.Category?.Cor ?? "transparent")"></span>
+                                <select class="form-select form-select-sm cat-inline" data-id="@t.Id">
+                                    <option value="">— sem categoria —</option>
+                                    @foreach (var cat in Model.Categories) {
+                                        if (t.CategoryId == cat.Id) {
+                                            <option value="@cat.Id" data-cor="@cat.Cor" selected>@cat.Nome</option>
+                                        } else {
+                                            <option value="@cat.Id" data-cor="@cat.Cor">@cat.Nome</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            @if (t.IsManual) {
+                                <div class="tx-actions">
+                                    <a class="tx-action" asp-action="Edit" asp-route-id="@t.Id" title="Editar">✎</a>
+                                    <form asp-action="Delete" method="post" class="d-inline"
+                                          onsubmit="return confirm('Excluir esta transação manual?');">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@t.Id" />
+                                        <button type="submit" class="tx-action tx-action-danger" title="Excluir">✕</button>
+                                    </form>
+                                </div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<form id="antiforgery-holder" class="d-none">@Html.AntiForgeryToken()</form>
+
+@section Scripts {
+    <script>
+        (function () {
+            const token = document.querySelector('#antiforgery-holder input[name="__RequestVerificationToken"]').value;
+
+            function toast(mensagem, erro) {
+                const el = document.createElement('div');
+                el.className = 'app-toast' + (erro ? ' app-toast-erro' : '');
+                el.textContent = mensagem;
+                document.body.appendChild(el);
+                requestAnimationFrame(() => el.classList.add('show'));
+                setTimeout(() => {
+                    el.classList.remove('show');
+                    setTimeout(() => el.remove(), 300);
+                }, 3200);
+            }
+
+            // Filtros aplicam automaticamente ao mudar os selects.
+            ['f-periodo', 'f-categoria', 'f-tipo'].forEach(id =>
+                document.getElementById(id).addEventListener('change', () =>
+                    document.getElementById('filter-form').submit()));
+
+            // Edição inline de categoria: grava, aprende a regra e aplica às
+            // transações semelhantes ainda sem categoria.
+            document.querySelectorAll('.cat-inline').forEach(select => {
+                select.addEventListener('change', async () => {
+                    const id = parseInt(select.dataset.id, 10);
+                    const categoryId = select.value === '' ? null : parseInt(select.value, 10);
+                    select.disabled = true;
+                    try {
+                        const resp = await fetch('@Url.Action("SetCategory", "Transactions")', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'RequestVerificationToken': token,
+                            },
+                            body: JSON.stringify({ id: id, categoryId: categoryId, aplicarSemelhantes: true }),
+                        });
+                        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                        const dados = await resp.json();
+
+                        const dot = document.querySelector('[data-dot-for="' + id + '"]');
+                        dot.style.background = dados.categoria ? dados.categoria.cor : 'transparent';
+
+                        if (dados.semelhantes > 0) {
+                            toast('Categoria aplicada. ' + dados.semelhantes + ' lançamentos semelhantes também foram categorizados.');
+                            setTimeout(() => location.reload(), 1200);
+                        } else {
+                            toast(dados.categoria ? 'Categoria aplicada e memorizada para os próximos extratos.'
+                                                  : 'Categoria removida.');
+                        }
+                    } catch (e) {
+                        toast('Não foi possível salvar. Tente novamente.', true);
+                    } finally {
+                        select.disabled = false;
+                    }
+                });
+            });
+        })();
+    </script>
+}

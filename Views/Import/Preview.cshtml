@@ -1,0 +1,208 @@
+@model ImportPreviewViewModel
+@{
+    ViewData["Title"] = "Revisar importação";
+    var total = Model.Session.Transactions.Count;
+}
+
+<div class="page-header">
+    <div>
+        <h1>Revisar importação</h1>
+        <p class="page-subtitle">
+            <strong>@Model.Session.FileName</strong> · @total novas transações
+            @if (Model.Session.DuplicatesSkipped > 0) {
+                <span>· @Model.Session.DuplicatesSkipped duplicadas ignoradas</span>
+            }
+            @if (Model.Sugeridas > 0) {
+                <span>· <span class="text-suggest">@Model.Sugeridas categorizadas automaticamente</span></span>
+            }
+        </p>
+    </div>
+    <div class="page-header-meta">
+        <span class="counter-chip"><span id="contador-categorizadas">@Model.Sugeridas</span> / @total categorizadas</span>
+    </div>
+</div>
+
+<form asp-controller="Import" asp-action="Confirm" method="post" id="confirm-form">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="id" value="@Model.Session.Id" />
+
+    <div class="card app-card table-card">
+        <table class="table app-table align-middle">
+            <thead>
+                <tr>
+                    <th style="width:110px">Data</th>
+                    <th>Lançamento</th>
+                    <th class="text-end" style="width:140px">Valor</th>
+                    <th style="width:300px">Categoria</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{ string? grupoAtual = null; }
+                @foreach (var t in Model.Session.Transactions) {
+                    if (t.MatchKey != grupoAtual) {
+                        grupoAtual = t.MatchKey;
+                        var qtd = Model.Session.Transactions.Count(x => x.MatchKey == grupoAtual);
+                        <tr class="group-row">
+                            <td colspan="4">
+                                @grupoAtual
+                                @if (qtd > 1) {
+                                    <span class="group-count">@qtd lançamentos — a categoria escolhida vale para todos</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    <tr>
+                        <td class="text-nowrap">@t.Date.ToString("dd/MM/yyyy")</td>
+                        <td>
+                            <div class="tx-title">@t.Lancamento</div>
+                            @if (!string.IsNullOrWhiteSpace(t.Detalhes)) {
+                                <div class="tx-details">@t.Detalhes</div>
+                            }
+                        </td>
+                        <td class="text-end text-nowrap @(t.Valor < 0 ? "valor-neg" : "valor-pos")">
+                            @t.Valor.ToString("C2")
+                        </td>
+                        <td>
+                            <div class="cat-cell">
+                                <select class="form-select form-select-sm cat-select"
+                                        name="categorias[@t.UniqueHash]"
+                                        data-matchkey="@t.MatchKey">
+                                    <option value="">— sem categoria —</option>
+                                    @foreach (var cat in Model.Categories) {
+                                        if (t.SuggestedCategoryId == cat.Id) {
+                                            <option value="@cat.Id" data-cor="@cat.Cor" selected>@cat.Nome</option>
+                                        } else {
+                                            <option value="@cat.Id" data-cor="@cat.Cor">@cat.Nome</option>
+                                        }
+                                    }
+                                    <option value="__new__">＋ Nova categoria…</option>
+                                </select>
+                                @if (t.SuggestedCategoryId.HasValue) {
+                                    <span class="badge-suggest" title="Sugerida a partir das suas categorizações anteriores">auto</span>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="sticky-actions">
+        <button type="button" class="btn btn-outline-secondary" form="discard-form">Descartar</button>
+        <button type="submit" class="btn btn-primary btn-lg">Confirmar importação</button>
+    </div>
+</form>
+
+<form asp-controller="Import" asp-action="Discard" method="post" id="discard-form"
+      onsubmit="return confirm('Descartar esta importação? Nada será gravado.');">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="id" value="@Model.Session.Id" />
+</form>
+
+<!-- Modal: nova categoria -->
+<div class="modal fade" id="modal-nova-categoria" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm-plus">
+        <div class="modal-content app-modal">
+            <div class="modal-header">
+                <h5 class="modal-title">Nova categoria</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label" for="nova-cat-nome">Nome</label>
+                <input type="text" class="form-control" id="nova-cat-nome" maxlength="60"
+                       placeholder="Ex.: Alimentação, Transporte, Assinaturas…" />
+                <label class="form-label mt-3" for="nova-cat-cor">Cor</label>
+                <input type="color" class="form-control form-control-color" id="nova-cat-cor" value="#22c55e" />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="nova-cat-salvar">Criar categoria</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const selects = Array.from(document.querySelectorAll('.cat-select'));
+            const contador = document.getElementById('contador-categorizadas');
+            const modalEl = document.getElementById('modal-nova-categoria');
+            const modal = new bootstrap.Modal(modalEl);
+            let selectAguardandoNova = null;
+
+            function atualizaContador() {
+                contador.textContent = selects.filter(s => s.value !== '' && s.value !== '__new__').length;
+            }
+
+            // Escolher a categoria de um lançamento aplica aos demais do mesmo
+            // estabelecimento (mesma MatchKey) que ainda estão sem categoria.
+            function propaga(origem) {
+                if (!origem.value || origem.value === '__new__') return;
+                selects
+                    .filter(s => s !== origem && s.dataset.matchkey === origem.dataset.matchkey && s.value === '')
+                    .forEach(s => {
+                        s.value = origem.value;
+                        s.classList.add('flash');
+                        setTimeout(() => s.classList.remove('flash'), 900);
+                    });
+            }
+
+            selects.forEach(s => s.addEventListener('change', () => {
+                if (s.value === '__new__') {
+                    selectAguardandoNova = s;
+                    document.getElementById('nova-cat-nome').value = '';
+                    modal.show();
+                    return;
+                }
+                propaga(s);
+                atualizaContador();
+            }));
+
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                // Cancelou sem criar: volta o select para "sem categoria".
+                if (selectAguardandoNova && selectAguardandoNova.value === '__new__') {
+                    selectAguardandoNova.value = '';
+                }
+                selectAguardandoNova = null;
+                atualizaContador();
+            });
+            modalEl.addEventListener('shown.bs.modal', () => document.getElementById('nova-cat-nome').focus());
+
+            document.getElementById('nova-cat-salvar').addEventListener('click', () => {
+                const nome = document.getElementById('nova-cat-nome').value.trim();
+                const cor = document.getElementById('nova-cat-cor').value;
+                if (!nome) { document.getElementById('nova-cat-nome').focus(); return; }
+
+                const valor = 'new:' + nome + '|' + cor;
+                // Disponibiliza a nova categoria em todos os selects da tela.
+                selects.forEach(s => {
+                    if (!Array.from(s.options).some(o => o.value === valor)) {
+                        const opt = new Option(nome + ' (nova)', valor);
+                        opt.dataset.cor = cor;
+                        s.insertBefore(opt, s.querySelector('option[value="__new__"]'));
+                    }
+                });
+
+                const origem = selectAguardandoNova;
+                selectAguardandoNova = null;
+                if (origem) {
+                    origem.value = valor;
+                    propaga(origem);
+                }
+                modal.hide();
+                atualizaContador();
+            });
+
+            document.getElementById('nova-cat-nome').addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    document.getElementById('nova-cat-salvar').click();
+                }
+            });
+
+            atualizaContador();
+        })();
+    </script>
+}

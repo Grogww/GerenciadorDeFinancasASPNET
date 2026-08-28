@@ -1,0 +1,71 @@
+@model CategoriesIndexViewModel
+@{
+    ViewData["Title"] = "Categorias";
+}
+
+<div class="page-header">
+    <div>
+        <h1>Categorias</h1>
+        <p class="page-subtitle">Organize seus gastos e receitas. As regras aprendidas categorizam os próximos extratos sozinhas.</p>
+    </div>
+</div>
+
+<div class="card app-card">
+    <h2 class="card-section-title">Nova categoria</h2>
+    <form asp-action="Create" method="post" class="cat-create-form">
+        @Html.AntiForgeryToken()
+        <div class="filter-field filter-grow">
+            <label for="c-nome">Nome</label>
+            <input type="text" class="form-control" id="c-nome" name="nome" maxlength="60" required
+                   placeholder="Ex.: Alimentação, Transporte, Assinaturas…" />
+        </div>
+        <div class="filter-field">
+            <label for="c-cor">Cor</label>
+            <input type="color" class="form-control form-control-color" id="c-cor" name="cor" value="#22c55e" />
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-primary">Criar</button>
+        </div>
+    </form>
+</div>
+
+@if (Model.Items.Count == 0) {
+    <div class="card app-card empty-state mt-4">
+        <span class="empty-icon">◧</span>
+        <p>Você ainda não tem categorias. Crie a primeira acima ou durante a importação de um extrato.</p>
+    </div>
+} else {
+    <div class="cat-grid mt-4">
+        @foreach (var item in Model.Items) {
+            <div class="card app-card cat-card">
+                <div class="cat-card-header">
+                    <span class="cat-swatch" style="background:@item.Category.Cor"></span>
+                    <span class="cat-name">@item.Category.Nome</span>
+                </div>
+                <div class="cat-card-stats">
+                    <div><strong>@item.TransactionCount</strong> transações</div>
+                    <div><strong>@item.RuleCount</strong> regras aprendidas</div>
+                    <div class="@(item.Total < 0 ? "valor-neg" : "valor-pos")">@item.Total.ToString("C2")</div>
+                </div>
+                <details class="cat-card-edit">
+                    <summary>Editar</summary>
+                    <form asp-action="Edit" method="post" class="cat-edit-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@item.Category.Id" />
+                        <input type="text" class="form-control form-control-sm" name="nome"
+                               value="@item.Category.Nome" maxlength="60" required />
+                        <input type="color" class="form-control form-control-color form-control-sm"
+                               name="cor" value="@item.Category.Cor" />
+                        <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
+                    </form>
+                    <form asp-action="Delete" method="post" class="mt-2"
+                          onsubmit="return confirm('Excluir esta categoria? As transações dela ficarão sem categoria e as regras aprendidas serão apagadas.');">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@item.Category.Id" />
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Excluir categoria</button>
+                    </form>
+                </details>
+            </div>
+        }
+    </div>
+}

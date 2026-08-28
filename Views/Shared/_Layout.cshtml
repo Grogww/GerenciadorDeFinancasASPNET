@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] · Minhas Finanças</title>
+    <script type="importmap"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/GerenciadorDeFinancasASPNET.styles.css" asp-append-version="true" />
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="sidebar-brand" asp-controller="Transactions" asp-action="Index">
+                <span class="brand-icon">◈</span>
+                <span>Minhas<strong>Finanças</strong></span>
+            </a>
+            <nav class="sidebar-nav">
+                @{
+                    var controllerAtual = (string?)ViewContext.RouteData.Values["controller"];
+                }
+                <a class="nav-item @(controllerAtual == "Dashboard" ? "active" : "")"
+                   asp-controller="Dashboard" asp-action="Index">
+                    <span class="nav-icon">◔</span> Dashboard
+                </a>
+                <a class="nav-item @(controllerAtual == "Transactions" ? "active" : "")"
+                   asp-controller="Transactions" asp-action="Index">
+                    <span class="nav-icon">⇄</span> Transações
+                </a>
+                <a class="nav-item @(controllerAtual == "Import" ? "active" : "")"
+                   asp-controller="Import" asp-action="Index">
+                    <span class="nav-icon">⤒</span> Importar extrato
+                </a>
+                <a class="nav-item @(controllerAtual == "Categories" ? "active" : "")"
+                   asp-controller="Categories" asp-action="Index">
+                    <span class="nav-icon">◧</span> Categorias
+                </a>
+            </nav>
+            <div class="sidebar-footer">Gerenciador de finanças pessoais</div>
+        </aside>
+
+        <main class="content">
+            @if (TempData["Sucesso"] is string sucesso) {
+                <div class="alert alert-success alert-dismissible fade show app-alert" role="alert">
+                    @sucesso
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                </div>
+            }
+            @if (TempData["Info"] is string info) {
+                <div class="alert alert-info alert-dismissible fade show app-alert" role="alert">
+                    @info
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                </div>
+            }
+            @if (TempData["Erro"] is string erro) {
+                <div class="alert alert-danger alert-dismissible fade show app-alert" role="alert">
+                    @erro
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                </div>
+            }
+            @RenderBody()
+        </main>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
