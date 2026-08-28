@@ -6,9 +6,12 @@
 # Project-specific files
 regras.md
 TempData/
+data/db/
 data/db/*.db
 data/db/*.db-shm
 data/db/*.db-wal
+*.csv
+*.ofx
 
 # User-specific files
 *.rsuser

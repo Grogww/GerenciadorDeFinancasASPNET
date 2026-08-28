@@ -6,8 +6,8 @@ namespace GerenciadorDeFinancasASPNET.Services {
     /// <summary>
     /// Extrai de uma transação a "chave" que identifica o estabelecimento/contraparte.
     ///
-    /// O campo Detalhes do extrato do BB vem como "02/06 14:11 AmazonPrimeBR AMZN P" ou
-    /// "07/06 16:28 00008367886992 GUSTAVO SAN": data/hora + (às vezes) CPF/CNPJ + nome.
+    /// O campo Detalhes do extrato do BB vem como "02/06 14:11 Nome" ou
+    /// "07/06 16:28 Num Nome": data/hora + (às vezes) CPF/CNPJ + nome.
     /// Só o nome interessa para reconhecer a mesma despesa/receita em extratos futuros,
     /// então removemos o prefixo de data/hora, os tokens só-numéricos e os acentos.
     /// </summary>
@@ -18,7 +18,7 @@ namespace GerenciadorDeFinancasASPNET.Services {
         public static string BuildMatchKey(string? lancamento, string? detalhes) {
             var texto = DateTimePrefix().Replace((detalhes ?? "").Trim(), "");
 
-            // Descarta tokens sem nenhuma letra (CPF/CNPJ, códigos, "64 583 427" etc.).
+            // Descarta tokens sem nenhuma letra (CPF/CNPJ, códigos, "56 876 456" etc.).
             var tokens = texto
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Where(tok => tok.Any(char.IsLetter));
